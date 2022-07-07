@@ -53,7 +53,7 @@ exports.listVoters = (req, res, next) => {
         sql.input('searchStr', msSql.VarChar(127), req.body.search);
 
         //console.log("list voters");
-        sql.execute('GetVotersList')
+        sql.execute('TGetVotersList')
         .then((result) => {
             conn.close();
             //console.log("voters count " + result.recordset.length );
