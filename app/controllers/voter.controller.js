@@ -3,6 +3,7 @@ const util = require('util');
 const config = require("../config/db.config.js");
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
+const sizeOf = require('buffer-image-size');
 
 
 exports.listVoters = (req, res, next) => {
@@ -298,10 +299,13 @@ exports.downloadVoterParchiPdf = (req, res, next) => {
 
             const stream = res.writeHead(200, {
                 'Content-Type': 'application/pdf',
+                'Transfer-Encoding': 'chunked',
                 'Content-disposition': 'attachment;filename=voterparchi'+ (req.body.iblockcode != null && req.body.iblockcode != '')? '_' + req.body.iblockcode : '_' + req.body.icnic +'.pdf',
             });
             doc.on('data', (chunk) => stream.write(chunk));
             doc.on('end', () => stream.end());
+
+
         })
         .catch(function (err) {
             console.log(err);
@@ -342,19 +346,21 @@ function printParchiSlips(doc, blockcode, cnic, recordsets) {
         .text('ٹوٹل ووٹر کی تعداد'.split(' ').reverse().join(' '), xr-12-140, y+72+(rowh*0), { align: 'right', width: 140 })
         .text('مرد ووٹر کی تعداد'.split(' ').reverse().join(' '), xr-((xr-24)/3)-140, y+72+(rowh*0), { align: 'right', width: 140 })
         .text('خواتین ووٹر کی تعداد'.split(' ').reverse().join(' '), xr-12-140, y+68+(rowh*1), { align: 'right', width: 140 })
-        .text('خاندان کی تعداد'.split(' ').reverse().join(' '), xr-((xr-24)/3)-140, y+68+(rowh*1), { align: 'right', width: 140 })
+        //.text('خاندان کی تعداد'.split(' ').reverse().join(' '), xr-((xr-24)/3)-140, y+68+(rowh*1), { align: 'right', width: 140 })
+        //.text('پولنگ لوکیشن'.split(' ').reverse().join(' '), xr-12-140, y+64+(rowh*2), { align: 'right', width: 140 })
         .text('انتخابی علاقہ'.split(' ').reverse().join(' '), xr-12-140, y+64+(rowh*2), { align: 'right', width: 140 })
-        .text('تحصیل/ تعلقہ'.split(' ').reverse().join(' '), xr-((xr-24)/3)-140, y+64+(rowh*2), { align: 'right', width: 140 });
+        //.text('تحصیل/ تعلقہ'.split(' ').reverse().join(' '), xr-((xr-24)/3)-140, y+64+(rowh*2), { align: 'right', width: 140 });
 
         doc.font('Helvetica').fontSize(12)
         .text(blc.blc_votersCount, xr-190, y+76+(rowh*0), { align: 'right', width: 106 })
         .text(blc.blc_maleVotersCount, xr-(xr/3)-162, y+76+(rowh*0), { align: 'right', width: 106 })
-        .text(blc.blc_femaleVotersCount, xr-190, y+72+(rowh*1), { align: 'right', width: 106 })
-        .text(blc.blc_familiesCount, xr-(xr/3)-162, y+72+(rowh*1), { align: 'right', width: 106 });
+        .text(blc.blc_femaleVotersCount, xr-190, y+72+(rowh*1), { align: 'right', width: 106 });
+        //.text(blc.blc_familiesCount, xr-(xr/3)-162, y+72+(rowh*1), { align: 'right', width: 106 });
 
         doc.font('Jameel Noori Nastaleeq').fontSize(13)
-        .text(blc.blc_tehsil.split(' ').reverse().join(' '), xr-84-150, y+64+(rowh*2), { align: 'right', width: 150 })
-        .text(blc.blc_district.split(' ').reverse().join(' '), xr-((xr-24)/3)-64-150, y+64+(rowh*2), { align: 'right', width: 150 })
+        .text(blc.electoralArea != null ? blc.electoralArea.split(' ').reverse().join(' ').replace(")", "( ").replace("(", " )") : '', xr-84-1100, y+64+(rowh*2), { align: 'right', width: 1100 });
+        //.text(blc.blc_tehsil != null ? blc.blc_tehsil.split(' ').reverse().join(' ') : '', xr-84-150, y+64+(rowh*2), { align: 'right', width: 150 })
+        //.text(blc.blc_district != null ? blc.blc_district.split(' ').reverse().join(' ') : '', xr-((xr-24)/3)-64-150, y+64+(rowh*2), { align: 'right', width: 150 })
 
         doc.font('Helvetica').fontSize(10).text('Printed on : ' + new Date().toLocaleString(), 15, y+6+divh, { align: 'left', width: 180 });
 
@@ -380,15 +386,15 @@ function printParchiSlips(doc, blockcode, cnic, recordsets) {
         }
 
         doc.save()
-        .rect(xr - 99, y + 16, 98, divh - 2)
-        .rect(xr - 319, y + 16, 98, divh - 2 - (rowh*2))
+        .rect(xr - 89, y + 16, 88, divh - 2)
+        .rect(xr - 309, y + 16, 88, divh - 2 - (rowh*2))
         .fill('#F4F4F4').restore();
 
         doc.lineJoin('round').rect(15, y + 15, xr - 15, divh).stroke();
 
-        doc.moveTo(xr - 100, y + 15).lineTo(xr - 100, y + 15 + divh).stroke();
+        doc.moveTo(xr - 90, y + 15).lineTo(xr - 90, y + 15 + divh).stroke();
         doc.moveTo(xr - 220, y + 15).lineTo(xr - 220, y + 15 + divh - (rowh*2)).stroke();
-        doc.moveTo(xr - 320, y + 15).lineTo(xr - 320, y + 15 + divh - (rowh*2)).stroke();
+        doc.moveTo(xr - 310, y + 15).lineTo(xr - 310, y + 15 + divh - (rowh*2)).stroke();
         doc.moveTo(xr - 440, y + 15).lineTo(xr - 440, y + 15 + divh).stroke();
 
         doc.moveTo(xr - 440, y + 15 + rowh).lineTo(xr, y + 15 + rowh).stroke();
@@ -409,33 +415,40 @@ function printParchiSlips(doc, blockcode, cnic, recordsets) {
         if(items[c].vtr_cnic.length == 13) items[c].vtr_cnic = items[c].vtr_cnic.substr(0,5) + '-' + items[c].vtr_cnic.substr(5,7) + '-' + items[c].vtr_cnic.substr(12);
 
         doc.font('Helvetica').fontSize(12)
-        .text(items[c].vtr_blockCode, xr-220, y + 24 + (rowh*1), { align: 'right', width: 106 })
-        .text(items[c].vtr_cnic, xr-440, y + 24 + (rowh*1), { align: 'right', width: 106 })
-        .text(items[c].vtr_girana, xr-220, y + 24 + (rowh*2), { align: 'right', width: 106 })
-        .text(items[c].vtr_silsila, xr-440, y + 24 + (rowh*2), { align: 'right', width: 106 });
+        .text(items[c].vtr_blockCode, xr-210, y + 24 + (rowh*1), { align: 'right', width: 106 })
+        .text(items[c].vtr_cnic, xr-430, y + 24 + (rowh*1), { align: 'right', width: 106 })
+        .text(items[c].vtr_girana, xr-210, y + 24 + (rowh*2), { align: 'right', width: 106 })
+        .text(items[c].vtr_silsila, xr-430, y + 24 + (rowh*2), { align: 'right', width: 106 });
 
-        if(items[c].vtr_nameBlob != null) doc.image(Buffer.from(items[c].vtr_nameBlob.replace('data:image/png;base64,',''), 'base64'), xr-6-220, y + 13, { align: 'right', height: 32 });
+        var nimg = Buffer.from(items[c].vtr_nameBlob.replace('data:image/png;base64,',''), 'base64');
+        var wdimensions = nimg != null ? sizeOf(nimg).width : 0;
+
+        if(items[c].vtr_nameBlob != null) doc.image(nimg, xr+10-(wdimensions), y + 13, { align: 'right', height: 26 });
         else doc.font('Jameel Noori Nastaleeq').fontSize(13).text(items[c].vtr_nameUrdu.split(' ').reverse().join(' '), xr-8-217, y + 21, { align: 'right', width: 108 })
 
-        if(items[c].vtr_fatherBlob != null) doc.image(Buffer.from(items[c].vtr_fatherBlob.replace('data:image/png;base64,',''), 'base64'), xr-6-440, y + 13, { align: 'right', height: 32 });
+        if(items[c].vtr_fatherBlob != null) doc.image(Buffer.from(items[c].vtr_fatherBlob.replace('data:image/png;base64,',''), 'base64'), xr-20-440, y + 13, { align: 'right', height: 26 });
         else doc.font('Jameel Noori Nastaleeq').fontSize(13).text(items[c].vtr_fatherUrdu.split(' ').reverse().join(' '), xr-8-438, y + 21, { align: 'right', width: 108 })
 
-        if(items[c].vtr_addressBlob != null) doc.image(Buffer.from(items[c].vtr_addressBlob.replace('data:image/png;base64,',''), 'base64'), xr-6-440+76, y + 13 + (rowh*3), { align: 'right', height: 32 });
-        else doc.font('Jameel Noori Nastaleeq').fontSize(13).text(items[c].vtr_addressUrdu.split(' ').reverse().join(' '), xr-8-440, y + 20 + (rowh*3), { align: 'right', width: 334 })
+        if(items[c].vtr_addressBlob != null) doc.image(Buffer.from(items[c].vtr_addressBlob.replace('data:image/png;base64,',''), 'base64'), xr-30-440+140, y + 15 + (rowh*3), { align: 'right', height: 24 });
+        else doc.font('Jameel Noori Nastaleeq').fontSize(13).text(items[c].vtr_addressUrdu.split(' ').reverse().join(' '), xr-18+40, y + 21 + (rowh*3), { align: 'right', width: 334 })
 
-        doc.font('Jameel Noori Nastaleeq').fontSize(13)
-        .text(items[c].vtr_pollingStation.split(' ').reverse().join(' ').replace(")", "( ").replace("(", " )"), xr-8-440, y + 20 + (rowh*4), { align: 'right', width: 334 })
+        doc.font('Jameel Noori Nastaleeq').fontSize(12)
+        .text(items[c].vtr_pollingStation.split(' ').reverse().join(' ').replace(")", "( ").replace("(", " )"), xr+4-440, y + 20 + (rowh*4), { align: 'right', width: 334 })
 
         let ltext = '';
         if(candi.es_name == 'bat' ) ltext = 'بلے پر مہر لگائیں';
         else ltext = candi.es_nameUrdu + ' پر مہر لگائیں';
 
-        doc.image('assets/images/party-symbols/'+ candi.es_imageHr, 26, y + 32 , { width: (xr - 27 - 450) })
+        doc.image('assets/images/party-symbols/'+ candi.es_imageHr, 32, y + 28 , { width: (xr - 27 - 460) })
 		.fillColor('#444444')
         .font('Jameel Noori Nastaleeq')
 		.fontSize(17)
-		.text(ltext.split(' ').reverse().join(' '), 20, y + divh - 18 , { align: 'center', width: (xr - 15 - 450) })
-		.fillColor('#000000')
+		.text(ltext.split(' ').reverse().join(' '), 20, y + divh - 24 , { align: 'center', width: (xr - 15 - 450) })
+		.fillColor('#555555')
+        .font('Helvetica')
+		.fontSize(8)
+        .text('www.voogleapp.com', 20, y + divh + 2 , { align: 'center', width: (xr - 15 - 450) })
+        .fillColor('#000000')
         .moveDown();
 
         i++;

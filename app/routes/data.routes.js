@@ -13,7 +13,7 @@ module.exports = app => {
 	router.get("/download-blockcode-voters/:blockcode", data.downloadBlockcodeVotersData);
 	router.get("/download-family-voters/:cnic", data.downloadFamilyVotersDataByCnic);
     router.get("/download-blockcode-list/:userid", data.downloadBlockcodeListData);
-    router.get("/download-pollingstation-list/:userid", data.downloadPollingStationListData);
+    router.get("/download-pollinglocation-list/:userid", data.downloadPollingLocationListData);
 
 	app.use('/api/data', router);
 };

@@ -145,8 +145,8 @@ exports.reportWorkersCampaignSummary = (req, res, next) => {
 exports.updateFoodInchargeDetails = (req, res, next) => {
     const conn = new msSql.ConnectionPool(config.dbConfig);
 
-    console.log("update food incharge details " + req.body.plsId);
-    console.log(util.inspect(req.body, {showHidden: false, depth: null, colors: true}));
+    //console.log("update food incharge details " + req.body.plsId);
+    //console.log(util.inspect(req.body, {showHidden: false, depth: null, colors: true}));
 
     conn.connect().then(() => {
         const sql = new msSql.Request(conn);
@@ -180,7 +180,7 @@ exports.updateFoodInchargeDetails = (req, res, next) => {
 
         sql.query(queri)
         .then((resultSet) => {
-            console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
+            //console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
             conn.close();
 
             if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {

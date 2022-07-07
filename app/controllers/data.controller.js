@@ -7,29 +7,26 @@ const {reduce}=require("lodash");
 
 
 exports.appSignIn = (req, res, next) => {
-    //res.setHeader('Access-Control-Allow-Origin', '*');
-    //res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH');
-    //res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
-    //res.setHeader('Access-Control-Allow-Credentials', true);
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("login user " + req.body.username);
+    //console.log("login user " + req.body.username);
 
     let fetchedUser;
     conn.connect().then(() => {
         const sql = new msSql.Request(conn);
         sql.query(
-            "select * from tbl_appusers as u inner join tbl_candidates as c on u.cn_id = c.cn_id where aur_isManager = 0 and aur_isActive = 1 and aur_userName ='" +
-            req.body.username + "';"
+            "select *, pa_votersCount as votersCount, pa_maleVotersCount as maleVotersCount, pa_femaleVotersCount as femaleVotersCount, pa_familiesCount as familiesCount, pa_blockCodesCount as blockCodesCount, pa_pollingStationsCount as pollingStationsCount "+
+            "from tbl_appusers as u inner join tbl_candidates as c on u.cn_id = c.cn_id "+
+            "inner join tbl_constituencyprovincial as cp on cp.pa_id = c.pa_id "+
+            "where aur_isManager = 0 and aur_isActive = 1 and aur_userName = '" + req.body.username + "';"
         )
         .then((resultSet) => {
 
             if (resultSet.recordset.length === 0 ) {
                 conn.close();
-                res.status(401).json({
+                return res.status(400).json({
                     message: "User not found",
                 });
-                return;
             }
             ////for token usage////
             fetchedUser = resultSet.recordset[0];
@@ -40,58 +37,53 @@ exports.appSignIn = (req, res, next) => {
               fetchedUser.aur_password
             ); */
 
-            if(req.body.password == fetchedUser.aur_password) return true;
-            else return false;
-        })
-        .then((result) => {
-
-            if (!result) {
+            if(req.body.password != fetchedUser.aur_password) {
                 conn.close();
-                res.status(401).json({
+                return res.status(400).json({
                     message: "Invalid password",
                 });
-                return;
             }
+            else {
+                const accessToken = jwt.sign({ username: fetchedUser.aur_userName, userid: fetchedUser.aur_id }, "meri-app-ka-secret-hae-ye", {expiresIn: "1h"});
+                conn.close();
 
-            const accessToken = jwt.sign({ username: fetchedUser.aur_userName, userid: fetchedUser.aur_id }, "meri-app-ka-secret-hae-ye", {expiresIn: "1h"});
-
-            conn.close();
-
-            ////sending back response////
-			res.status(200).json({
-                accessToken: accessToken,
-                expiresIn: 3600,
-                userId: fetchedUser.aur_id,
-                userName: fetchedUser.aur_userName,
-                userFullname: fetchedUser.aur_fullName,
-                password: fetchedUser.aur_password,
-                userRole: fetchedUser.aur_role, //manager, supervisor, worker
-                userCnic: fetchedUser.aur_cnic,
-                candidateName: "مخدوم زین قریشی",//fetchedUser.cn_name,
-                candidateParty: fetchedUser.cn_party, //pti, pmln, ppp, juif, azaad
-                candidateSymbol: fetchedUser.cn_symbol, //bat, tiger, arrow, book, {{anything}}
-                candidateDetail: fetchedUser.cn_details,
-                candidateArea: fetchedUser.cn_details_area,
-                appDeathTime: fetchedUser.cn_licenseExpiry,
-                totalVotes : 483914,
-                totalFamilies : 101823,
-                totalBlockCodes : 423,
-                totalPollingStations : 360,
-                totalCheckedVotes : 210510,
-                totalReachableVotes : 90110
-            });
+                ////sending back response////
+                return res.status(200).json({
+                    accessToken: accessToken,
+                    expiresIn: 3600,
+                    userId: fetchedUser.aur_id,
+                    userName: fetchedUser.aur_userName,
+                    userFullname: fetchedUser.aur_fullName,
+                    password: fetchedUser.aur_password,
+                    userRole: fetchedUser.aur_role, //manager, supervisor, worker
+                    userCnic: fetchedUser.aur_cnic,
+                    candidateName: fetchedUser.cn_name,
+                    candidateParty: fetchedUser.cn_party, //pti, pmln, ppp, juif, azaad
+                    candidateSymbol: fetchedUser.cn_symbol, //bat, tiger, arrow, book, {{anything}}
+                    candidateDetail: fetchedUser.cn_details,
+                    candidateArea: fetchedUser.cn_details_area,
+                    appDeathTime: fetchedUser.cn_licenseExpiry,
+                    totalVotes : fetchedUser.votersCount,
+                    totalFamilies : (fetchedUser.familiesCount != null ? fetchedUser.familiesCount : 0),
+                    totalBlockCodes : (fetchedUser.blockCodesCount != null ? fetchedUser.blockCodesCount : 0),
+                    totalPollingStations : (fetchedUser.pollingStationsCount != null ? fetchedUser.pollingStationsCount : 0),
+                    totalCheckedVotes : 0,
+                    totalReachableVotes : 0
+                });
+            }
+            
         })
         .catch((err) => {
             console.log(err);
             conn.close();
-            res.status(500).json({
-              message: "Execution Failed",
+            return res.status(500).json({
+                message: "Execution Failed"
             });
         });
     })
     .catch(function (err) {
         console.log(err);
-        res.status(500).json({
+        return res.status(500).json({
           message: "No Storage Connection",
         });
     });
@@ -109,19 +101,23 @@ async function getUserIdFromUsername(username){
             .then((resultSet) => {
                 conn.close();
 
-                if (resultSet.recordset.length > 0) resolve(resultSet.recordset[0].aur_id);
-                else resolve(null);
+                if (resultSet.recordset.length > 0) return resolve(resultSet.recordset[0].aur_id);
+                else return resolve(null);
             })
             .catch((err) => {
                 console.log(err);
-                conn.close();
-                resolve(null);
+                if(conn != null) conn.close();
+                return resolve(null);
             });
         })
         .catch(function (err) {
             console.log(err);
-            resolve(null);
+            return resolve(null);
         });
+    })
+    .catch(function (err) {
+        console.log(err);
+        return resolve(null);
     });
 }
 
@@ -136,21 +132,25 @@ async function getCandidateFromAppcode(appcode) {
             )
             .then((resultSet) => {
                 conn.close();
-                //console.log(util.inspect(resultSet, {showHidden: false, depth: null, colors: true}));
+                console.log(util.inspect(resultSet.recordset[0], {showHidden: false, depth: null, colors: true}));
 
-                if (resultSet.recordset.length > 0) resolve(resultSet.recordset[0]);
+                if (resultSet.recordset.length > 0) return resolve(resultSet.recordset[0]);
                 else return resolve(null);
             })
             .catch((err) => {
                 console.log(err);
                 conn.close();
-                resolve(null);
+                return resolve(null);
             });
         })
         .catch(function (err) {
             console.log(err);
-            resolve(null);
+            return resolve(null);
         });
+    })
+    .catch(function (err) {
+        console.log(err);
+        return resolve(null);
     });
 }
 
@@ -159,79 +159,78 @@ exports.appSignUp = async (req, res, next) => {
     //console.log("sign up user " + req.body.username);
 
     let cnId;
-    getCandidateIdFromAppcode(req.body.appcode).then( (_cnId) => {
+    getCandidateFromAppcode(req.body.appcode).then( (_cnId) => {
+        //console.log("cnid " + _cnId.cn_id);
+
         if(_cnId == null){
             //console.log("error - license expired");
-            res.setHeader('Access-Control-Allow-Origin', '*')
-            res.status(401).json({
-                message: "License is expired or not found",
+            return res.status(400).json({
+                message: "License is Expired or not Found",
             });
-            return;
         }
-        else cnId = _cnId;
-    }).then(() => {
-
-        getUserFromUsername(req.body.username).then( (_user) => {
-            if(_user != null){
+        else cnId = _cnId.cn_id;
+    
+        getUserIdFromUsername(req.body.username).then( (_user) => {
+            if(_user != null && _user > 0){
                 //console.log("error - user already exists");
-                res.setHeader('Access-Control-Allow-Origin', '*')
-                res.status(401).json({
-                    message: "App User already exists",
+                return res.status(400).json({
+                    message: "User already Exists",
                 });
-                return;
             }
         }).then(() => {
 
             conn.connect().then(pool => {
                 pool.query(
-                    "INSERT INTO tbl_appusers ([aur_userName],[aur_password],[aur_isManager],[aur_fullName],[aur_isActive],[aur_cnic],[aur_mobile],[aur_whatsApp],[cn_id]) VALUES "+
-                    "('" + req.body.username +"', '" + req.body.password +"', '0', '" + req.body.fullname +"', 0, '" + req.body.cnic +"', '" + req.body.mobile +"', '" + req.body.whatsappnumber +"', '" + cnId +"')"
+                    "INSERT INTO tbl_appusers ([aur_userName],[aur_password],[aur_isManager],[aur_accessLevel],[aur_fullName],[aur_isActive],[aur_cnic],[aur_mobile],[aur_whatsApp],[aur_signUpTime],[cn_id]) VALUES "+
+                    "('" + req.body.username +"', '" + req.body.password +"', '0', '1','" + req.body.fullname +"', 1, '" + req.body.cnic +"', '" + req.body.mobile +"', '" + req.body.whatsappnumber +"', SYSDATETIME(), '" + cnId +"')"
                 )
                 .then((resultSet) => {
-                    console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
+                    //console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
 
 					if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {
 						//console.log("error");
                         conn.close();
-                        res.status(401).json({
-                            message: "Signup Operation failed",
+                        return res.status(400).json({
+                            message: "Sign Up Operation failed",
                         });
                     }
                     else{
                         //console.log("success");
                         conn.close();
-                        res.status(200).json({
+                        return res.status(200).json({
                             type: "success",
-                            message: "App User added Successfully"
+                            message: "User Registered Successfully"
                         });
                     }
                 })
                 .catch((err) => {
                     console.log(err);
-                    conn.close();
-                    res.status(500).json({
-                    message: "Execution Failed",
+                    if(conn != null) conn.close();
+                    return res.status(500).json({
+                        message: "Execution Failed",
                     });
                 });
             })
             .catch(function (err) {
-                //console.log(err);
-                res.status(500).json({
-                message: "No Storage Connection",
+                console.log(err);
+                return res.status(500).json({
+                    message: "No Storage Connection",
                 });
+            });
+        })
+        .catch(function (err) {
+            console.log(err);
+            return res.status(500).json({
+                message: "Something went Wrong",
             });
         });
     });
 }
 
 exports.appChangePassword = (req, res, next) => {
-    //res.setHeader('Access-Control-Allow-Origin', '*');
-    //res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH');
-    //res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
-    //res.setHeader('Access-Control-Allow-Credentials', true);
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("password changed " + req.body.username);
+    //console.log("password changed " + req.body.username);
 
     let fetchedUser;
     conn.connect().then(() => {
@@ -244,12 +243,11 @@ exports.appChangePassword = (req, res, next) => {
 
             if (resultSet.recordset.length === 0 ) {
                 conn.close();
-                res.status(401).json({
-                    message: "User not found",
+                return res.status(400).json({
+                    message: "User not Found",
                 });
-                return;
             }
-            ////for token usage////
+            
             fetchedUser = resultSet.recordset[0];
 
             ///comparing bcrypting////
@@ -258,71 +256,63 @@ exports.appChangePassword = (req, res, next) => {
               fetchedUser.aur_password
             ); */
 
-            if(req.body.password == fetchedUser.aur_password) return true;
-            else return false;
-        })
-        .then((result) => {
-
-            if (!result) {
+            if(req.body.password != fetchedUser.aur_password) {
                 conn.close();
-                res.status(401).json({
+                return res.status(400).json({
                     message: "Invalid password",
                 });
-                return;
             }
+            else {
 
-            sql.query(
-                "update tbl_appusers set aur_password = "+ req.body.newpassword +" where aur_isManager = 0 and aur_isActive = 1 and aur_userName ='" +
-                req.body.username +
-                "';"
-            )
-            .then((resultSet) => {
-                if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {
-                res.status(401).json({
-                        message: "Update Operation failed",
+                sql.query(
+                    "update tbl_appusers set aur_password = "+ req.body.newpassword +" where aur_isManager = 0 and aur_isActive = 1 and aur_userName ='" +
+                    req.body.username +
+                    "';"
+                )
+                .then((resultSet) => {
+                    if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {
+                        return res.status(400).json({
+                            message: "Update Operation failed",
+                        });
+                    }
+                    else {
+                        //console.log("success");
+                        if(conn != null) conn.close();
+                        return res.status(200).json({
+                            type: "success",
+                            message: "Password Updated Successfully"
+                        });
+                    }
+                })
+                .catch((err) => {
+                    console.log(err);
+                    if(conn != null) conn.close();
+                    return res.status(400).json({
+                        message: "Operation failed",
                     });
-                }
-                else{
-                    console.log("success");
-                    conn.close();
-                    res.status(200).json({
-                        type: "success",
-                        message: "Password Updated Successfully"
-                    });
-                }
-            })
-            .catch((err) => {
-              console.log(err);
-              conn.close();
-              res.status(401).json({
-                message: "Operation failed",
-              });
-            });
+                });
+            }
         })
         .catch((err) => {
             console.log(err);
-            conn.close();
-            res.status(500).json({
+            if(conn != null) conn.close();
+            return res.status(500).json({
               message: "Execution Failed",
             });
         });
     })
     .catch(function (err) {
         console.log(err);
-        res.status(500).json({
+        return res.status(500).json({
           message: "No Storage Connection",
         });
     });
 }
 
 exports.appForgetPassword = (req, res, next) => {
-    //res.setHeader('Access-Control-Allow-Origin', '*');
-    //res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH');
-    //res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
-    //res.setHeader('Access-Control-Allow-Credentials', true);
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("password forget " + req.body.username);
+    //console.log("password forget " + req.body.username);
 
     let fetchedUser;
     conn.connect().then(() => {
@@ -334,47 +324,45 @@ exports.appForgetPassword = (req, res, next) => {
 
             if (resultSet.recordset.length === 0 ) {
                 conn.close();
-                res.status(401).json({
+                return res.status(400).json({
                     message: "User not found",
                 });
-                return;
             }
-            return true;
-        })
-        .then((result) => {
+            else {  
 
-            sql.query(
-                "update tbl_appusers set aur_password = "+ req.body.newpassword +" where aur_isManager = 0 and aur_isActive = 1 and aur_userName ='" +
-                req.body.username +
-                "';"
-            )
-            .then((resultSet) => {
-                //console.log("success");
-                conn.close();
-                res.status(200).json({
-                    type: "success",
-                    message: "Password Updated Successfully"
+                sql.query(
+                    "update tbl_appusers set aur_password = "+ req.body.newpassword +" where aur_isManager = 0 and aur_isActive = 1 and aur_userName ='" +
+                    req.body.username +
+                    "';"
+                )
+                .then((resultSet) => {
+                    //console.log("success");
+                    conn.close();
+                    return res.status(200).json({
+                        type: "success",
+                        message: "Password Updated Successfully"
+                    });
+                })
+                .catch((err) => {
+                    console.log(err);
+                    conn.close();
+                    return res.status(400).json({
+                        message: "Operation failed",
+                    });
                 });
-            })
-            .catch((err) => {
-              console.log(err);
-              conn.close();
-              res.status(401).json({
-                message: "Operation failed",
-              });
-            });
+            }
         })
         .catch((err) => {
             console.log(err);
-            conn.close();
-            res.status(500).json({
+            if(conn != null) conn.close();
+            return res.status(500).json({
               message: "Execution Failed",
             });
         });
     })
     .catch(function (err) {
         console.log(err);
-        res.status(500).json({
+        return res.status(500).json({
           message: "No Storage Connection",
         });
     });
@@ -383,7 +371,7 @@ exports.appForgetPassword = (req, res, next) => {
 exports.updateVoterPhones = (req, res, next) => {
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("update voter phones " + req.body.cnic);
+    //console.log("update voter phones " + req.body.cnic);
 
     let fetchedUser;
     conn.connect().then(() => {
@@ -392,16 +380,16 @@ exports.updateVoterPhones = (req, res, next) => {
             "update tbl_voterdetails set vtr_mobile = '"+ req.body.phonenumber1 +"', vtr_mobile2 = '"+ req.body.phonenumber2 +"', vtr_whatsApp = '"+ req.body.whatsappnumber +"', vtr_mobileUpdateBy = '"+ req.body.userid +"', vtr_mobileUpdateTime = SYSDATETIME() where vtr_cnic = '"+ req.body.cnic +"';"
         )
         .then((resultSet) => {
-            console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
+            //console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
             conn.close();
 
             if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {
-                res.status(401).json({
+                return res.status(400).json({
                     message: "Voter not found",
                 });
             }
-            else{
-                res.status(200).json({
+            else {
+                return res.status(200).json({
                     type: "success",
                     message: "Operation Successfull",
                 });
@@ -409,16 +397,16 @@ exports.updateVoterPhones = (req, res, next) => {
         })
         .catch((err) => {
             console.log(err);
-            conn.close();
-            res.status(500).json({
-              message: "Execution Failed",
+            if(conn != null) conn.close();
+            return res.status(500).json({
+                message: "Execution Failed",
             });
         });
     })
     .catch(function (err) {
         console.log(err);
-        res.status(500).json({
-          message: "No Storage Connection",
+        return res.status(500).json({
+            message: "No Storage Connection",
         });
     });
 }
@@ -426,7 +414,7 @@ exports.updateVoterPhones = (req, res, next) => {
 exports.updateVoterLocation = (req, res, next) => {
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("update voter locations " + req.body.cnic);
+    //console.log("update voter locations " + req.body.cnic);
 
     let fetchedUser;
     conn.connect().then(() => {
@@ -435,16 +423,16 @@ exports.updateVoterLocation = (req, res, next) => {
             "update tbl_voterdetails set vtr_locLat = '"+ req.body.lati +"', vtr_locLong = '"+ req.body.longi +"', vtr_locUpdateBy = '"+ req.body.userid +"', vtr_locUpdateTime = SYSDATETIME() where vtr_cnic = '"+ req.body.cnic +"';"
         )
         .then((resultSet) => {
-            console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
+            //console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
             conn.close();
 
             if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {
-                res.status(401).json({
+                return res.status(400).json({
                     message: "Voter not found",
                 });
             }
             else{
-                res.status(200).json({
+                return res.status(200).json({
                     type: "success",
                     message: "Operation Successfull",
                 });
@@ -453,15 +441,15 @@ exports.updateVoterLocation = (req, res, next) => {
         .catch((err) => {
             console.log(err);
             conn.close();
-            res.status(500).json({
-              message: "Execution Failed",
+            return res.status(500).json({
+                message: "Execution Failed",
             });
         });
     })
     .catch(function (err) {
         console.log(err);
-        res.status(500).json({
-          message: "No Storage Connection",
+        return res.status(500).json({
+            message: "No Storage Connection",
         });
     });
 }
@@ -469,7 +457,7 @@ exports.updateVoterLocation = (req, res, next) => {
 exports.reportComplaint = (req, res, next) => {
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("report complaint by user " + req.body.user_id);
+    //console.log("report complaint by user " + req.body.user_id);
 
     conn.connect().then(() => {
         const sql = new msSql.Request(conn);
@@ -477,17 +465,17 @@ exports.reportComplaint = (req, res, next) => {
             "insert into tbl_reportedcomplaints (rpd_tag, rpd_details, usr_id, rpd_locLat, rpd_locLong, rpd_time, rpd_status) values ('"+ req.body.problem_tag +"', '"+ req.body.problem_details +"', '"+ req.body.user_id +"', '"+ req.body.lati +"', '"+ req.body.longi +"', SYSDATETIME(), 'new');"
         )
         .then((resultSet) => {
-            console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
+            //console.log(util.inspect(resultSet.rowsAffected, {showHidden: false, depth: null, colors: true}));
             conn.close();
 
             if (resultSet.rowsAffected.length === 0 || (resultSet.rowsAffected.length > 0 && resultSet.rowsAffected[0] === 0)) {
-                res.status(401).json({
+                return res.status(400).json({
                     message: "Operation Failed",
                 });
             }
             else{
-                console.log("success");
-                res.status(200).json({
+                //console.log("success");
+                return res.status(200).json({
                     type: "success",
                     message: "Operation Successfull",
                 });
@@ -496,193 +484,185 @@ exports.reportComplaint = (req, res, next) => {
         .catch((err) => {
             console.log(err);
             conn.close();
-            res.status(500).json({
+            return res.status(500).json({
               message: "Execution Failed",
             });
         });
     })
     .catch(function (err) {
         console.log(err);
-        res.status(500).json({
+        return res.status(500).json({
           message: "No Storage Connection",
         });
     });
 }
 
 exports.downloadFamilyVotersDataByCnic = (req, res, next) => {
-    //res.setHeader('Access-Control-Allow-Origin', '*');
-    //res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH');
-    //res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
-    //res.setHeader('Access-Control-Allow-Credentials', true);
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("download family voters data api called " + req.params.cnic);
+    //console.log("download family voters data api called " + req.params.cnic);
     let cnic = req.params.cnic;
 
-  conn.connect()
-  .then(() => {
-    const sql = new msSql.Request(conn);
+    conn.connect()
+    .then(() => {
+        const sql = new msSql.Request(conn);
 
-    //console.log("icnic --- " + cnic);
-    if(cnic){
-        sql.input('icnic', msSql.VarChar(15), cnic.replace(/-/g, '').replace(/ /g, ''));
-    }
+        //console.log("icnic --- " + cnic);
+        if(cnic){
+            sql.input('icnic', msSql.VarChar(15), cnic.replace(/-/g, '').replace(/ /g, ''));
+        }
 
-    sql.execute('API_GetVotersFamilyDataByCnic')
-      .then((result) => {
+        sql.execute('API_GetVotersFamilyDataByCnic')
+        .then((result) => {
 
-        conn.close();
-
-        console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
-        res.status(200).json({
-          message: "Data is Attached",
-          items: result.recordset,
-          rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
+            conn.close();
+            //console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
+            
+            return res.status(200).json({
+                message: "Data is Attached",
+                items: result.recordset,
+                rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
+            });
+        })
+        .catch(function (err) {
+            console.log(err);
+            if(conn != null) conn.close();
+            return res.status(500).json({
+                message: "Execution Failed",
+            });
         });
-      })
-      .catch(function (err) {
+    })
+    .catch(function (err) {
         console.log(err);
-        conn.close();
-        res.status(501).json({
-          message: "Execution Failed",
+        return res.status(500).json({
+            message: "No Storage Connection",
         });
-      });
-  })
-  .catch(function (err) {
-    console.log(err);
-    res.status(500).json({
-      message: "No Storage Connection",
     });
-  });
 };
 
 exports.downloadBlockcodeVotersData = (req, res, next) => {
-    //res.setHeader('Access-Control-Allow-Origin', '*');
-    //res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, PATCH');
-    //res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type');
-    //res.setHeader('Access-Control-Allow-Credentials', true);
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
     console.log("download blockcode voters data api called " + req.params.blockcode);
     let blockCode = req.params.blockcode;
 
-  conn.connect()
-  .then(() => {
-    const sql = new msSql.Request(conn);
+    conn.connect()
+    .then(() => {
+        const sql = new msSql.Request(conn);
 
-    //console.log("iblockcode --- " + blockCode);
-    if(blockCode){
-        sql.input('iblockcode', msSql.VarChar(15), blockCode);
-    }
+        //console.log("iblockcode --- " + blockCode);
+        if(blockCode){
+            sql.input('iblockcode', msSql.VarChar(15), blockCode);
+        }
 
-    sql.execute('API_GetBlockCodeVotersData')
-      .then((result) => {
+        sql.execute('API_GetBlockCodeVotersData')
+        .then((result) => {
 
-        conn.close();
-
-        console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
-        res.status(200).json({
-          message: "Data is Attached",
-          items: result.recordset,
-          rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
+            conn.close();
+            console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
+            
+            return res.status(200).json({
+                message: "Data is Attached",
+                items: result.recordset,
+                rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
+            });
+        })
+        .catch(function (err) {
+            console.log(err);
+            if(conn != null) conn.close();
+            return res.status(500).json({
+                message: "Execution Failed",
+            });
         });
-      })
-      .catch(function (err) {
+    })
+    .catch(function (err) {
         console.log(err);
-        conn.close();
-        res.status(501).json({
-          message: "Execution Failed",
+        return res.status(500).json({
+            message: "No Storage Connection",
         });
-      });
-  })
-  .catch(function (err) {
-    console.log(err);
-    res.status(500).json({
-      message: "No Storage Connection",
     });
-  });
 };
 
 exports.downloadBlockcodeListData = (req, res, next) => {
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("download blockcode list api called " + req.params.userid);
+    //console.log("download blockcode list api called " + req.params.userid);
     let userId = req.params.userid;
 
-  conn.connect()
-  .then(() => {
-    const sql = new msSql.Request(conn);
+    conn.connect()
+    .then(() => {
+        const sql = new msSql.Request(conn);
 
-    //console.log("userId --- " + userId);
-    if(userId){
-      sql.input('iuserid', msSql.VarChar(15), userId);
-    }
+        //console.log("userId --- " + userId);
+        if(userId){
+            sql.input('iuserid', msSql.VarChar(15), userId);
+        }
 
-  sql.execute('API_GetBlockCodeListData')
-    .then((result) => {
-      conn.close();
+        sql.execute('API_GetBlockCodeListData')
+        .then((result) => {
+            conn.close();
 
-      console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
-      res.status(200).json({
-        message: "Data is Attached",
-        items: result.recordset,
-        rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
-      });
+            //console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
+            return res.status(200).json({
+                message: "Data is Attached",
+                items: result.recordset,
+                rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
+            });
+        })
+        .catch(function (err) {
+            console.log(err);
+            if(conn != null) conn.close();
+            return res.status(500).json({
+                message: "Execution Failed",
+            });
+        });
     })
     .catch(function (err) {
-      console.log(err);
-      conn.close();
-      res.status(501).json({
-        message: "Execution Failed",
-      });
+        console.log(err);
+        return res.status(500).json({
+            message: "No Storage Connection",
+        });
     });
-})
-.catch(function (err) {
-  console.log(err);
-  res.status(500).json({
-    message: "No Storage Connection",
-  });
-});
 };
 
-exports.downloadPollingStationListData = (req, res, next) => {
+exports.downloadPollingLocationListData = (req, res, next) => {
 
     const conn = new msSql.ConnectionPool(config.dbConfig);
-    console.log("download polling station list api called " + req.params.userid);
+    //console.log("download polling station list api called " + req.params.userid);
     let userId = req.params.userid;
 
-  conn.connect()
-  .then(() => {
-    const sql = new msSql.Request(conn);
+    conn.connect()
+    .then(() => {
+        const sql = new msSql.Request(conn);
 
-    //console.log("userId --- " + userId);
-    if(userId){
-      sql.input('iuserid', msSql.VarChar(15), userId);
-    }
+        //console.log("userId --- " + userId);
+        if(userId){
+            sql.input('iuserid', msSql.VarChar(15), userId);
+        }
 
-  sql.execute('API_GetPollingStationListData')
-    .then((result) => {
-      conn.close();
+        sql.execute('API_GetPollingLocationListData')
+        .then((result) => {
+            conn.close();
 
-      console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
-      res.status(200).json({
-        message: "Data is Attached",
-        items: result.recordset,
-        rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
-      });
+            //console.log(result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0);
+            return res.status(200).json({
+                message: "Data is Attached",
+                items: result.recordset,
+                rows_count: result.recordset != null && result.recordset.length > 0 ? result.recordset[0].totalrows : 0
+            });
+        })
+        .catch(function (err) {
+            console.log(err);
+            if(conn != null) conn.close();
+            return res.status(500).json({
+                message: "Execution Failed",
+            });
+        });
     })
     .catch(function (err) {
-      console.log(err);
-      conn.close();
-      res.status(501).json({
-        message: "Execution Failed",
-      });
+        console.log(err);
+        return res.status(500).json({
+            message: "No Storage Connection",
+        });
     });
-})
-.catch(function (err) {
-  console.log(err);
-  res.status(500).json({
-    message: "No Storage Connection",
-  });
-});
 };

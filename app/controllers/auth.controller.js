@@ -9,7 +9,7 @@ const config = require("../config/db.config.js");
 exports.signIn = (req, res, next) => {
     const conn = new msSql.ConnectionPool(config.dbConfig);
 
-    console.log("--- " + JSON.stringify(req.body, null, 6));
+    //console.log("--- " + JSON.stringify(req.body, null, 6));
 
     let fetchedUser;
     conn.connect().then(() => {
