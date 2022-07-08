@@ -433,7 +433,7 @@ function printParchiSlips(doc, blockcode, cnic, recordsets) {
         else doc.font('Jameel Noori Nastaleeq').fontSize(13).text(items[c].vtr_addressUrdu.split(' ').reverse().join(' '), xr-18+40, y + 21 + (rowh*3), { align: 'right', width: 334 })
 
         doc.font('Jameel Noori Nastaleeq').fontSize(12)
-        .text(items[c].vtr_pollingStation.split(' ').reverse().join(' ').replace(")", "( ").replace("(", " )"), xr+4-440, y + 20 + (rowh*4), { align: 'right', width: 334 })
+        .text(items[c].vtr_pollingStation.split(' ').reverse().join(' ').replace(")", "( ").replace("(", " )").concat(" - ", items[c].vtr_psNumber), xr+4-440, y + 20 + (rowh*4), { align: 'right', width: 334 })
 
         let ltext = '';
         if(candi.es_name == 'bat' ) ltext = 'بلے پر مہر لگائیں';
